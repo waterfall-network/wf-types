@@ -1,127 +1,647 @@
-// Copyright 2024 Blue Wave Inc.
+// Copyright 2024   Blue Wave Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package types
 
 import (
+	"database/sql/driver"
 	"encoding/json"
+	"fmt"
+	"math"
 	"math/big"
+	"reflect"
 	"testing"
 
 	"gitlab.waterfall.network/waterfall/protocol/wf-types/common"
+	"gitlab.waterfall.network/waterfall/protocol/wf-types/common/hexutil"
 )
 
-func TestCheckpointRoundTrip(t *testing.T) {
-	cp := &Checkpoint{
-		Epoch:    10,
-		FinEpoch: 8,
-		Root:     common.HexToHash("0xaaaa"),
-		Spine:    common.HexToHash("0xbbbb"),
+func TestValidatorSync_Copy(t *testing.T) {
+	src_1 := &ValidatorSync{
+		OpType:     2,
+		ProcEpoch:  45645,
+		Index:      45645,
+		Creator:    common.Address{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		Amount:     new(big.Int),
+		InitTxHash: common.Hash{1, 2, 3},
 	}
+	src_1.Amount.SetString("32789456000000", 10)
 
-	// bytes round-trip
-	b := cp.Bytes()
-	cp2, err := BytesToCheckpoint(b)
-	if err != nil {
-		t.Fatal(err)
+	src_2 := &ValidatorSync{
+		OpType:          UpdateBalance,
+		ProcEpoch:       45645,
+		Index:           45645,
+		Creator:         common.Address{0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa},
+		Amount:          new(big.Int),
+		InitTxHash:      common.HexToHash("6bd2dcd23984cfb26a005a677d5d94e6e58467026fdbd40b8b7da891247b799f"),
+		ActivationEpoch: 645,
+		ExitEpoch:       math.MaxUint64,
 	}
-	if cp.Epoch != cp2.Epoch || cp.FinEpoch != cp2.FinEpoch || cp.Root != cp2.Root || cp.Spine != cp2.Spine {
-		t.Fatalf("bytes round-trip mismatch")
-	}
+	src_2.Amount.SetString("32999956000000", 10)
 
-	// JSON round-trip
-	data, err := json.Marshal(cp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var cp3 Checkpoint
-	if err := json.Unmarshal(data, &cp3); err != nil {
-		t.Fatal(err)
-	}
-	if cp.Epoch != cp3.Epoch || cp.Root != cp3.Root {
-		t.Fatalf("JSON round-trip mismatch")
-	}
-}
-
-func TestCheckpointCopy(t *testing.T) {
-	cp := &Checkpoint{Epoch: 5, FinEpoch: 3, Root: common.HexToHash("0x1234"), Spine: common.HexToHash("0x5678")}
-	cp2 := cp.Copy()
-	cp2.Epoch = 99
-	if cp.Epoch == cp2.Epoch {
-		t.Fatal("Copy should be independent")
-	}
-}
-
-func TestValidatorSyncJSONRoundTrip(t *testing.T) {
-	vs := &ValidatorSync{
-		InitTxHash:      common.HexToHash("0xabcd"),
-		OpType:          Activate,
-		ProcEpoch:       5,
-		Index:           42,
-		Creator:         common.HexToAddress("0x1234567890123456789012345678901234567890"),
-		Amount:          big.NewInt(1000),
-		Balance:         big.NewInt(2000),
-		ActivationEpoch: 3,
-		ExitEpoch:       100,
-	}
-
-	data, err := json.Marshal(vs)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var vs2 ValidatorSync
-	if err := json.Unmarshal(data, &vs2); err != nil {
-		t.Fatal(err)
-	}
-
-	if vs.ProcEpoch != vs2.ProcEpoch || vs.Index != vs2.Index {
-		t.Fatalf("JSON round-trip mismatch")
-	}
-	if vs.Amount.Cmp(vs2.Amount) != 0 {
-		t.Fatalf("Amount mismatch: %s != %s", vs.Amount, vs2.Amount)
-	}
-}
-
-func TestFinalizationParamsCopy(t *testing.T) {
-	fp := &FinalizationParams{
-		Spines:    common.HashArray{common.HexToHash("0x01"), common.HexToHash("0x02")},
-		BaseSpine: func() *common.Hash { h := common.HexToHash("0x03"); return &h }(),
-		Checkpoint: &Checkpoint{
-			Epoch: 10, FinEpoch: 8,
-			Root: common.HexToHash("0xaa"), Spine: common.HexToHash("0xbb"),
+	tests := []struct {
+		name string
+		src  *ValidatorSync
+		want driver.Value
+	}{
+		{
+			name: "Copy-v1",
+			src:  src_1,
+			want: src_1,
 		},
-		SyncMode: MainSync,
+		{
+			name: "Copy-v2",
+			src:  src_2,
+			want: src_2,
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.src.Copy()
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+func TestValidatorSync_Print(t *testing.T) {
+	src_1 := &ValidatorSync{
+		OpType:     2,
+		ProcEpoch:  45645,
+		Index:      45645,
+		Creator:    common.Address{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		Amount:     new(big.Int),
+		InitTxHash: common.Hash{1, 2, 3},
+	}
+	src_1.Amount.SetString("32789456000000", 10)
 
-	cp := fp.Copy()
-	cp.Spines[0] = common.HexToHash("0xff")
-	if fp.Spines[0] == cp.Spines[0] {
-		t.Fatal("Copy Spines should be independent")
+	src_2 := &ValidatorSync{
+		OpType:          UpdateBalance,
+		ProcEpoch:       45645,
+		Index:           45645,
+		Creator:         common.Address{0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa},
+		Amount:          new(big.Int),
+		InitTxHash:      common.HexToHash("6bd2dcd23984cfb26a005a677d5d94e6e58467026fdbd40b8b7da891247b799f"),
+		ActivationEpoch: 645,
+		ExitEpoch:       math.MaxUint64,
+	}
+	src_2.Amount.SetString("32999956000000", 10)
+
+	tests := []struct {
+		name string
+		src  *ValidatorSync
+		want driver.Value
+	}{
+		{
+			name: "Copy-v1",
+			src:  src_1,
+			want: "{InitTxHash: 0x0102030000000000000000000000000000000000000000000000000000000000, OpType: 2, " +
+				"ProcEpoch: 45645, Index: 45645, Creator: 0xffffffffffffffffffffffffffffffffffffffff, " +
+				"Amount: 32789456000000, Balance: <nil>, TxHash: <nil>, ActivationEpoch: 0, ExitEpoch: 0}",
+		},
+		{
+			name: "Copy-v2",
+			src:  src_2,
+			want: "{InitTxHash: 0x6bd2dcd23984cfb26a005a677d5d94e6e58467026fdbd40b8b7da891247b799f, OpType: 2, " +
+				"ProcEpoch: 45645, Index: 45645, Creator: 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, " +
+				"Amount: 32999956000000, Balance: <nil>, TxHash: <nil>, ActivationEpoch: 645, ExitEpoch: 18446744073709551615}",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.src.Print()
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
 	}
 }
 
-func TestFinalizationParamsJSON(t *testing.T) {
-	fp := &FinalizationParams{
-		Spines:   common.HashArray{common.HexToHash("0x01")},
+func TestValidatorSync_Key(t *testing.T) {
+	src_1 := &ValidatorSync{
+		OpType:     2,
+		ProcEpoch:  45645,
+		Index:      45645,
+		Creator:    common.Address{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		Amount:     new(big.Int),
+		InitTxHash: common.Hash{0x01, 0x02, 0x03},
+	}
+	src_1.Amount.SetString("32789456000000", 10)
+
+	want := common.Hash{0x01, 0x02, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+
+	tests := []struct {
+		name string
+		src  *ValidatorSync
+		want driver.Value
+	}{
+		{
+			name: "Copy-1",
+			src:  src_1,
+			want: want,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.src.Key()
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidatorSync_MarshalJSON(t *testing.T) {
+	src_1 := &ValidatorSync{
+		OpType:     2,
+		ProcEpoch:  45645,
+		Index:      45645,
+		Creator:    common.Address{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		Amount:     new(big.Int),
+		Balance:    new(big.Int),
+		TxHash:     nil,
+		InitTxHash: common.Hash{1, 2, 3},
+	}
+	src_1.Amount.SetString("32789456000000", 10)
+	src_1.Balance.SetString("32789456000000", 10)
+
+	//fmt.Println()
+	exp := []byte("{\"opType\":\"0x2\"," +
+		"\"procEpoch\":\"0xb24d\"," +
+		"\"index\":\"0xb24d\"," +
+		"\"creator\":\"0xffffffffffffffffffffffffffffffffffffffff\"," +
+		"\"amount\":\"0x1dd263e09400\"," +
+		"\"balance\":\"0x1dd263e09400\"," +
+		"\"txHash\":null,\"InitTxHash\":\"0x0102030000000000000000000000000000000000000000000000000000000000\"}")
+	tests := []struct {
+		name string
+		src  *ValidatorSync
+		want driver.Value
+	}{
+		{
+			name: "Marshal-1",
+			src:  src_1,
+			want: exp,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, _ := tt.src.MarshalJSON()
+			got := &ValidatorSync{}
+			got.UnmarshalJSON(res)
+			expected := &ValidatorSync{}
+			expected.UnmarshalJSON(tt.want.([]byte))
+			if !reflect.DeepEqual(got, expected) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidatorSync_UnMarshalJSON(t *testing.T) {
+	src_1 := &ValidatorSync{
+		OpType:     2,
+		ProcEpoch:  45645,
+		Index:      45645,
+		Creator:    common.Address{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		Amount:     new(big.Int),
+		Balance:    new(big.Int),
+		InitTxHash: common.Hash{1, 2, 3},
+	}
+	src_1.Amount.SetString("32789456000000", 10)
+	src_1.Balance.SetString("1032789456000000", 10)
+
+	src_2 := &ValidatorSync{
+		OpType:          2,
+		ProcEpoch:       45645,
+		Index:           45645,
+		Creator:         common.Address{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		Amount:          new(big.Int),
+		Balance:         new(big.Int),
+		InitTxHash:      common.Hash{1, 2, 3},
+		ActivationEpoch: 789,
+		ExitEpoch:       math.MaxUint64,
+	}
+	src_2.Amount.SetString("32789456000000", 10)
+	src_2.Balance.SetString("1032789456000000", 10)
+
+	input1, _ := src_1.MarshalJSON()
+	input2, _ := src_2.MarshalJSON()
+	tests := []struct {
+		name  string
+		input []byte
+		want  driver.Value
+	}{
+		{
+			name:  "Marshal-1",
+			input: input1,
+			want:  fmt.Sprintf("%#v", src_1),
+		},
+		{
+			name:  "Marshal-2",
+			input: input2,
+			want:  fmt.Sprintf("%#v", src_2),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := &ValidatorSync{}
+			res.UnmarshalJSON(tt.input)
+			got := fmt.Sprintf("%#v", res)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidatorSync_UnMarshalJSON_deprecatedJsonV0(t *testing.T) {
+	//deprecated json data struct
+	type validatorSyncMarshalingV0 struct {
+		InitTxHash *common.Hash    `json:"initTxHash"`
+		OpType     *hexutil.Uint64 `json:"opType"`
+		ProcEpoch  *hexutil.Uint64 `json:"procEpoch"`
+		Index      *hexutil.Uint64 `json:"index"`
+		Creator    *common.Address `json:"creator"`
+		Amount     *hexutil.Big    `json:"amount"`
+		TxHash     *common.Hash    `json:"txHash"`
+		Balance    *hexutil.Big    `json:"balance"`
+	}
+
+	vs := &ValidatorSync{
+		OpType:     2,
+		ProcEpoch:  45645,
+		Index:      45645,
+		Creator:    common.Address{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		Amount:     new(big.Int),
+		Balance:    new(big.Int),
+		InitTxHash: common.Hash{1, 2, 3},
+	}
+	vs.Amount.SetString("32789456000000", 10)
+	vs.Balance.SetString("1032789456000000", 10)
+
+	src_1 := validatorSyncMarshalingV0{
+		OpType:     (*hexutil.Uint64)(&vs.OpType),
+		ProcEpoch:  (*hexutil.Uint64)(&vs.ProcEpoch),
+		Index:      (*hexutil.Uint64)(&vs.Index),
+		Creator:    &vs.Creator,
+		Amount:     nil,
+		TxHash:     vs.TxHash,
+		InitTxHash: &vs.InitTxHash,
+		Balance:    nil,
+	}
+	if vs.Amount != nil {
+		src_1.Amount = (*hexutil.Big)(vs.Amount)
+	}
+	if vs.Balance != nil {
+		src_1.Balance = (*hexutil.Big)(vs.Balance)
+	}
+	input, _ := json.Marshal(src_1)
+	tests := []struct {
+		name  string
+		input []byte
+		want  driver.Value
+	}{
+		{
+			name:  "Marshal-1",
+			input: input,
+			want:  fmt.Sprintf("%#v", vs),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := &ValidatorSync{}
+			res.UnmarshalJSON(tt.input)
+			got := fmt.Sprintf("%#v", res)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestChecpoint_ToBytes(t *testing.T) {
+	src_1 := &Checkpoint{
+		Epoch:    45645,
+		FinEpoch: 45647,
+		Root:     common.Hash{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11},
+		Spine:    common.Hash{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22},
+	}
+
+	want := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb2, 0x4d,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb2, 0x4F,
+		0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	}
+
+	tests := []struct {
+		name string
+		src  *Checkpoint
+		want driver.Value
+	}{
+		{
+			name: "Copy-1",
+			src:  src_1,
+			want: fmt.Sprintf("%#x", want),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := fmt.Sprintf("%#x", tt.src.Bytes())
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestChecpoint_BytesToCheckpoint(t *testing.T) {
+	src_1 := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb2, 0x4d,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb2, 0x4F,
+		0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	}
+
+	want := &Checkpoint{
+		Epoch:    45645,
+		FinEpoch: 45647,
+		Root:     common.Hash{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11},
+		Spine:    common.Hash{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22},
+	}
+
+	tests := []struct {
+		name string
+		src  []byte
+		want *Checkpoint
+		//want driver.Value
+	}{
+		{
+			name: "Copy-1",
+			src:  src_1,
+			want: want,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, _ := BytesToCheckpoint(tt.src)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestChecpoint_Copy(t *testing.T) {
+	src_1 := &Checkpoint{
+		Epoch:    45645,
+		FinEpoch: 45647,
+		Root:     common.Hash{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11},
+		Spine:    common.Hash{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22},
+	}
+
+	tests := []struct {
+		name string
+		src  *Checkpoint
+		want driver.Value
+	}{
+		{
+			name: "Copy-1",
+			src:  src_1,
+			want: fmt.Sprintf("%#v", src_1),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := fmt.Sprintf("%#v", tt.src.Copy())
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCheckpoint_MarshalJSON(t *testing.T) {
+	src_1 := &Checkpoint{
+		Epoch:    45645,
+		FinEpoch: 45647,
+		Root:     common.Hash{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11},
+		Spine:    common.Hash{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22},
+	}
+	//fmt.Println()
+	exp := "{\"epoch\":\"0xb24d\",\"finEpoch\":\"0xb24f\"," +
+		"\"root\":\"0x1111111111111111110000000000000000000000000000000000000000000000\"," +
+		"\"spine\":\"0x2222222222222222220000000000000000000000000000000000000000000000\"}"
+	tests := []struct {
+		name string
+		src  *Checkpoint
+		want driver.Value
+	}{
+		{
+			name: "Marshal-1",
+			src:  src_1,
+			want: fmt.Sprintf("%s", exp),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, _ := tt.src.MarshalJSON()
+			got := fmt.Sprintf("%s", res)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCheckpoint_UnMarshalJSON(t *testing.T) {
+	src_1 := &Checkpoint{
+		Epoch:    45645,
+		FinEpoch: 45647,
+		Root:     common.Hash{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11},
+		Spine:    common.Hash{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22},
+	}
+	input, _ := src_1.MarshalJSON()
+	tests := []struct {
+		name  string
+		input []byte
+		want  driver.Value
+	}{
+		{
+			name:  "Marshal-1",
+			input: input,
+			want:  fmt.Sprintf("%#v", src_1),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := &Checkpoint{}
+			res.UnmarshalJSON(tt.input)
+			got := fmt.Sprintf("%#v", res)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFinalizationParams_Copy(t *testing.T) {
+	src_1 := &FinalizationParams{
+		Spines: common.HashArray{
+			common.Hash{0x22, 0x22},
+			common.Hash{0x33, 0x33},
+		},
+		BaseSpine: &common.Hash{0x11, 0x11},
+		Checkpoint: &Checkpoint{
+			Epoch:    45645,
+			FinEpoch: 45647,
+			Root:     common.Hash{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11},
+			Spine:    common.Hash{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22},
+		},
+		ValSyncData: []*ValidatorSync{{
+			OpType:     2,
+			ProcEpoch:  45645,
+			Index:      45645,
+			Creator:    common.Address{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+			Amount:     new(big.Int),
+			TxHash:     &common.Hash{4, 5, 6},
+			InitTxHash: common.Hash{7, 8, 9},
+		}},
+	}
+	src_1.ValSyncData[0].Amount.SetString("32789456000000", 10)
+
+	tests := []struct {
+		name string
+		src  *FinalizationParams
+		want driver.Value
+	}{
+		{
+			name: "Copy-1",
+			src:  src_1,
+			want: src_1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.src.Copy()
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFinalizationParams_MarshalJSON(t *testing.T) {
+	src_1 := &FinalizationParams{
+		Spines: common.HashArray{
+			common.Hash{0x22, 0x22},
+			common.Hash{0x33, 0x33},
+		},
+		BaseSpine: &common.Hash{0x11, 0x11},
+		Checkpoint: &Checkpoint{
+			Epoch:    45645,
+			FinEpoch: 45647,
+			Root:     common.Hash{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11},
+			Spine:    common.Hash{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22},
+		},
+		ValSyncData: []*ValidatorSync{{
+			OpType:     2,
+			ProcEpoch:  45645,
+			Index:      45645,
+			Creator:    common.Address{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+			Amount:     new(big.Int),
+			InitTxHash: common.Hash{1, 2, 3},
+		}},
 		SyncMode: HeadSync,
 	}
+	src_1.ValSyncData[0].Amount.SetString("32789456000000", 10)
 
-	data, err := json.Marshal(fp)
-	if err != nil {
-		t.Fatal(err)
-	}
+	//fmt.Println()
+	exp := []byte("{\"spines\":[\"0x2222000000000000000000000000000000000000000000000000000000000000\",\"0x3333000000000000000000000000000000000000000000000000000000000000\"],\"baseSpine\":\"0x1111000000000000000000000000000000000000000000000000000000000000\",\"checkpoint\":{\"epoch\":\"0xb24d\",\"finEpoch\":\"0xb24f\",\"root\":\"0x1111111111111111110000000000000000000000000000000000000000000000\",\"spine\":\"0x2222222222222222220000000000000000000000000000000000000000000000\"},\"valSyncData\":[{\"initTxHash\":\"0x0102030000000000000000000000000000000000000000000000000000000000\",\"opType\":\"0x2\",\"procEpoch\":\"0xb24d\",\"index\":\"0xb24d\",\"creator\":\"0xffffffffffffffffffffffffffffffffffffffff\",\"amount\":\"0x1dd263e09400\",\"txHash\":null,\"balance\":null}],\"syncMode\":\"0x2\"}")
 
-	var fp2 FinalizationParams
-	if err := json.Unmarshal(data, &fp2); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name string
+		src  *FinalizationParams
+		want driver.Value
+	}{
+		{
+			name: "Marshal-1",
+			src:  src_1,
+			want: exp,
+		},
 	}
-	if fp.SyncMode != fp2.SyncMode {
-		t.Fatalf("SyncMode mismatch: %d != %d", fp.SyncMode, fp2.SyncMode)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, _ := tt.src.MarshalJSON()
+			got := &FinalizationParams{}
+			got.UnmarshalJSON(res)
+			expected := &FinalizationParams{}
+			expected.UnmarshalJSON(tt.want.([]byte))
+			if !reflect.DeepEqual(got, expected) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFinalizationParams_UnMarshalJSON(t *testing.T) {
+	src_1 := &FinalizationParams{
+		Spines: common.HashArray{
+			common.Hash{0x22, 0x22},
+			common.Hash{0x33, 0x33},
+		},
+		BaseSpine: &common.Hash{0x11, 0x11},
+		Checkpoint: &Checkpoint{
+			Epoch:    45645,
+			FinEpoch: 45647,
+			Root:     common.Hash{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11},
+			Spine:    common.Hash{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22},
+		},
+		ValSyncData: []*ValidatorSync{{
+			OpType:     2,
+			ProcEpoch:  45645,
+			Index:      45645,
+			Creator:    common.Address{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+			Amount:     new(big.Int),
+			InitTxHash: common.Hash{1, 2, 3},
+		}},
+		SyncMode: MainSync,
+	}
+	src_1.ValSyncData[0].Amount.SetString("32789456000000", 10)
+
+	input, _ := src_1.MarshalJSON()
+	tests := []struct {
+		name  string
+		input []byte
+		want  driver.Value
+	}{
+		{
+			name:  "Marshal-1",
+			input: input,
+			want:  src_1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := &FinalizationParams{}
+			res.UnmarshalJSON(tt.input)
+			got := res
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got:  %v\nwant: %v", got, tt.want)
+			}
+		})
 	}
 }
