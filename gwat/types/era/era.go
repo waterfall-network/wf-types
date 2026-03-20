@@ -19,7 +19,7 @@ import (
 	"math"
 
 	"gitlab.waterfall.network/waterfall/protocol/wf-types/common"
-	"gitlab.waterfall.network/waterfall/protocol/wf-types/types"
+	"gitlab.waterfall.network/waterfall/protocol/wf-types/gwat/types"
 )
 
 // EraConfig holds chain configuration parameters relevant to era management.
