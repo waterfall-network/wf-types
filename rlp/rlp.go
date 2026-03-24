@@ -59,12 +59,3 @@ var ErrValueTooLarge = errors.New("rlp: value too large for type")
 
 // ErrMoreThanOneValue is returned when the input contains more than one value.
 var ErrMoreThanOneValue = errors.New("rlp: input contains more than one value")
-
-// inputError wraps an error with position information.
-type inputError struct {
-	msg string
-	err error
-}
-
-func (e *inputError) Error() string { return e.msg }
-func (e *inputError) Unwrap() error { return e.err }
