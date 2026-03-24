@@ -130,8 +130,7 @@ func encodeStruct(v reflect.Value) ([]byte, error) {
 		return nil, err
 	}
 
-	// Find the last non-optional field index to handle optional truncation.
-	// Optional fields at the end that are zero-valued are omitted.
+	// Find the last non-optional field index.
 	lastRequired := -1
 	for i, f := range fields {
 		if !f.optional {
@@ -139,12 +138,23 @@ func encodeStruct(v reflect.Value) ([]byte, error) {
 		}
 	}
 
+	// Find the last optional field that has a non-zero value.
+	// All optional fields up to and including it must be encoded,
+	// even if some of them are zero (gwat/rlp compatibility: optional fields
+	// are omitted only from the tail, never creating gaps in the list).
+	lastIncluded := lastRequired
+	for i, f := range fields {
+		if f.optional && !isZeroValue(v.Field(f.index)) {
+			lastIncluded = i
+		}
+	}
+
 	var payload []byte
 	for i, f := range fields {
 		fv := v.Field(f.index)
 
-		// Handle optional: skip if zero and after lastRequired
-		if f.optional && i > lastRequired && isZeroValue(fv) {
+		// Skip optional fields that trail beyond the last non-zero optional.
+		if f.optional && i > lastIncluded {
 			continue
 		}
 
@@ -160,14 +170,14 @@ func encodeStruct(v reflect.Value) ([]byte, error) {
 // encodeField encodes a single struct field, respecting tags.
 func encodeField(v reflect.Value, f structField) ([]byte, error) {
 	if f.tail {
-		// tail: encode remaining raw bytes — value must be []byte
+		// For []byte tail fields: gwat/rlp ignores the tail tag during encoding
+		// and encodes []byte as a regular RLP byte string (empty = 0x80).
+		// For non-byte slices: each element is written individually (no list wrapper).
 		if v.Kind() != reflect.Slice || v.Type().Elem().Kind() != reflect.Uint8 {
 			return nil, fmt.Errorf("rlp: tail field must be []byte")
 		}
-		if v.IsNil() || v.Len() == 0 {
-			return nil, nil
-		}
-		return v.Bytes(), nil
+		// Encode as a regular byte string — consistent with gwat/rlp behavior.
+		return encodeByteSlice(v.Bytes()), nil
 	}
 
 	if f.nilOK && v.Kind() == reflect.Ptr {

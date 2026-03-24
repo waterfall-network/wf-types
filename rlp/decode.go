@@ -297,11 +297,16 @@ func decodeStruct(b []byte, v reflect.Value) ([]byte, error) {
 		fv := v.Field(f.index)
 
 		if f.tail {
-			// tail: consume all remaining content as []byte
-			dst := make([]byte, len(content))
-			copy(dst, content)
-			fv.Set(reflect.ValueOf(dst))
-			content = nil
+			// For []byte tail: gwat/rlp encodes it as a regular RLP string,
+			// so decode it the same way (readString), not as raw remaining bytes.
+			if len(content) == 0 {
+				// no bytes left — leave as nil
+				break
+			}
+			content, err = decodeByteSlice(content, fv)
+			if err != nil {
+				return nil, fmt.Errorf("rlp: tail field: %w", err)
+			}
 			break
 		}
 
