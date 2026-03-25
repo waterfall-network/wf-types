@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.waterfall.network/waterfall/protocol/wf-types/blockdag/types"
 	"gitlab.waterfall.network/waterfall/protocol/wf-types/common"
-	"gitlab.waterfall.network/waterfall/protocol/wf-types/gwat/types"
 )
 
 type mockBlockchain struct {

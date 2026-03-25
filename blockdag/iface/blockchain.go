@@ -15,8 +15,8 @@
 package iface
 
 import (
-	"gitlab.waterfall.network/waterfall/protocol/wf-types/gwat/types"
-	"gitlab.waterfall.network/waterfall/protocol/wf-types/gwat/types/era"
+	"gitlab.waterfall.network/waterfall/protocol/wf-types/blockdag/types"
+	"gitlab.waterfall.network/waterfall/protocol/wf-types/blockdag/types/era"
 )
 
 // Database abstracts low-level key-value storage.
