@@ -15,8 +15,11 @@
 package iface
 
 import (
+	"math/big"
+
 	"gitlab.waterfall.network/waterfall/protocol/wf-types/blockdag/types"
 	"gitlab.waterfall.network/waterfall/protocol/wf-types/blockdag/types/era"
+	"gitlab.waterfall.network/waterfall/protocol/wf-types/common"
 )
 
 // Database abstracts low-level key-value storage.
@@ -39,6 +42,35 @@ type ChainConfig struct {
 	// AcceptCpRootOnFinEpoch is a hard-coded safelist of (cpRoot → []finEpoch) pairs
 	// used to skip invalid finalization requests on specific networks.
 	AcceptCpRootOnFinEpoch map[[32]byte][]uint64
+
+	// Validator state contract addresses.
+	ValidatorsStateAddress    common.Address
+	WaterfallDummyAddress     common.Address
+	AllocationContractAddress common.Address
+
+	// Validator consensus parameters.
+	EffectiveBalance       *big.Int // effective validator balance in WAT (not Wei)
+	ValidatorOpExpireSlots uint64   // number of slots before a validator op expires
+
+	// Fork slots — enable features when the current slot >= the fork slot.
+	ForkSlotDelegate      uint64
+	ForkSlotValSyncProc   uint64
+	ForkSlotValOpTracking uint64
+}
+
+// IsForkSlotDelegate reports whether the delegate fork is active at the given slot.
+func (c *ChainConfig) IsForkSlotDelegate(slot uint64) bool {
+	return slot >= c.ForkSlotDelegate
+}
+
+// IsForkSlotValSyncProc reports whether the validator-sync-proc fork is active at the given slot.
+func (c *ChainConfig) IsForkSlotValSyncProc(slot uint64) bool {
+	return slot >= c.ForkSlotValSyncProc
+}
+
+// IsForkSlotValOpTracking reports whether the validator-op-tracking fork is active at the given slot.
+func (c *ChainConfig) IsForkSlotValOpTracking(slot uint64) bool {
+	return slot >= c.ForkSlotValOpTracking
 }
 
 // BlockChain is the minimal interface that wf-engine and wf-consensus

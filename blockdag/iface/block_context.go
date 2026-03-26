@@ -14,7 +14,11 @@
 
 package iface
 
-import "math/big"
+import (
+	"math/big"
+
+	"gitlab.waterfall.network/waterfall/protocol/wf-types/common"
+)
 
 // BlockContext holds block-level information passed to token and validator processors.
 // It mirrors the data fields of gwat's vm.BlockContext, excluding EVM-specific
@@ -47,5 +51,5 @@ type BlockContext struct {
 	// Era is the Waterfall consensus era number.
 	Era uint64
 	// BlockHash is the hash of the current block.
-	BlockHash [32]byte
+	BlockHash common.Hash
 }

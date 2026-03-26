@@ -30,6 +30,7 @@ type HeaderInfo struct {
 	Time         uint64
 	Coinbase     common.Address
 	CpHash       common.Hash // hash of the last coordinated checkpoint block
+	Root         common.Hash // state root used for StateAt lookups
 }
 
 // BlockInfo is a lightweight block metadata struct

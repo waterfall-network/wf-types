@@ -15,6 +15,8 @@
 // Package iface defines interfaces used across wf-types modules.
 package iface
 
+import "math/big"
+
 // LogEntry represents an EVM event log.
 type LogEntry struct {
 	Address [20]byte
@@ -25,10 +27,12 @@ type LogEntry struct {
 // StateDB abstracts execution state access for validator and token processors.
 // gwat implements this over *state.StateDB.
 type StateDB interface {
-	GetBalance(addr [20]byte) []byte // *big.Int encoded as bytes
-	SetBalance(addr [20]byte, amount []byte)
-	AddBalance(addr [20]byte, amount []byte)
-	SubBalance(addr [20]byte, amount []byte)
+	GetBalance(addr [20]byte) *big.Int
+	SetBalance(addr [20]byte, amount *big.Int)
+	AddBalance(addr [20]byte, amount *big.Int)
+	SubBalance(addr [20]byte, amount *big.Int)
+
+	IsValidatorAddress(addr [20]byte) bool
 
 	GetState(addr [20]byte, key [32]byte) [32]byte
 	SetState(addr [20]byte, key [32]byte, value [32]byte)

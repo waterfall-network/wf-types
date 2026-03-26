@@ -14,10 +14,13 @@
 
 package types
 
-// Transaction holds a transaction's data needed by the plugin layer.
-// gwat populates this from its *core/types.Transaction at the call site,
-// keeping all LGPL code out of Apache 2.0 modules.
-type Transaction struct {
-	Raw  []byte // RLP-encoded full transaction (for signing / marshaling)
-	Data []byte // transaction input data field (tx.Data())
+const (
+	// ReceiptStatusSuccessful mirrors core/types.ReceiptStatusSuccessful.
+	ReceiptStatusSuccessful uint64 = 1
+)
+
+// Receipt holds the subset of a transaction receipt needed by the plugin layer.
+// gwat populates this from its *core/types.Receipt at the call site.
+type Receipt struct {
+	Status uint64
 }
