@@ -36,6 +36,9 @@ type ChainConfig struct {
 	ValidatorsPerSlot uint64
 	TransitionPeriod  uint64
 	StartEpochsPerEra uint64
+	// AcceptCpRootOnFinEpoch is a hard-coded safelist of (cpRoot → []finEpoch) pairs
+	// used to skip invalid finalization requests on specific networks.
+	AcceptCpRootOnFinEpoch map[[32]byte][]uint64
 }
 
 // BlockChain is the minimal interface that wf-engine and wf-consensus
