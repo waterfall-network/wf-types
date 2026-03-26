@@ -25,9 +25,11 @@ type HeaderInfo struct {
 	Slot         uint64
 	Era          uint64
 	Height       uint64
+	Nr           uint64 // finalized block number; 0 if not yet finalized
 	GasLimit     uint64
 	Time         uint64
 	Coinbase     common.Address
+	CpHash       common.Hash // hash of the last coordinated checkpoint block
 }
 
 // BlockInfo is a lightweight block metadata struct
