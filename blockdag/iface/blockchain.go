@@ -15,6 +15,7 @@
 package iface
 
 import (
+	"context"
 	"math/big"
 
 	"gitlab.waterfall.network/waterfall/protocol/wf-types/blockdag/types"
@@ -73,31 +74,71 @@ func (c *ChainConfig) IsForkSlotValOpTracking(slot uint64) bool {
 	return slot >= c.ForkSlotValOpTracking
 }
 
-// BlockChain is the minimal interface that wf-engine and wf-consensus
-// need from the gwat execution layer. gwat implements this over *core.BlockChain.
+// CreatorsBySlotStorage is the narrow validator-storage view used by the dag package.
+// gwat implements this over its ValidatorStorage, returning the shuffled creator
+// addresses for the given slot.
+type CreatorsBySlotStorage interface {
+	GetCreatorsBySlot(slot uint64) ([]common.Address, error)
+}
+
+// BlockChain is the interface that wf-engine's dag package needs from the gwat
+// execution layer. Signatures match gwat's *core.BlockChain methods exactly so
+// that gwat can implement this interface without any adaptation layer.
+//
+// It is the union of dag.blockChain and dag/finalizer.blockChain from wf-engine.
 type BlockChain interface {
-	// Block queries
-	GetBlock(hash [32]byte) (*types.BlockInfo, error)
-	GetBlockByNumber(number uint64) (*types.BlockInfo, error)
-	GetLastFinalizedBlock() (*types.BlockInfo, error)
-	GetLastFinalizedNumber() (uint64, error)
-	GetHeaderByHash(hash [32]byte) (*types.HeaderInfo, error)
-
-	// DAG queries
-	GetTips() (types.Tips, error)
-	GetSlotInfo() (*types.SlotInfo, error)
-	SetSlotInfo(si *types.SlotInfo) error
-	GetEraInfo() (*era.EraInfo, error)
-	GetLastCoordinatedCheckpoint() (*types.Checkpoint, error)
-	GetEpoch(epoch uint64) ([32]byte, error)
-
-	// State
-	StateAt(root [32]byte) (StateDB, error)
-
-	// Config and DB
 	Config() *ChainConfig
-	Database() Database
 
-	// DAG mutations
-	InsertBlockDag(block *types.BlockInfo) error
+	// --- Block queries ---
+	GetLastFinalizedBlock() Block
+	GetBlockByHash(hash common.Hash) Block
+	GetBlocksByHashes(hashes common.HashArray) BlockMap
+	GetBlock(ctx context.Context, hash common.Hash) Block
+	GetLastFinalizedNumber() uint64
+	GetLastFinalizedHeader() *types.HeaderInfo
+	GetHeaderByHash(hash common.Hash) *types.HeaderInfo
+	GetHeaderByNumber(number uint64) *types.HeaderInfo
+	GetHeadersByHashes(hashes common.HashArray) HeaderMap
+	GetBlockDag(hash common.Hash) *types.BlockDAG
+	GetTips() types.Tips
+	GetOptimisticSpines(gtSlot uint64) ([]common.HashArray, error)
+	GetFinalizedNumberByHash(hash common.Hash) *uint64
+	GetFinalizedHashByNumber(number uint64) common.Hash
+	GetBlockFinalizedNumber(hash common.Hash) *uint64
+
+	// --- Finalization mutations ---
+	FinalizeBlock(blockHash common.Hash, finNr uint64, stateBlockHash common.Hash, isHead bool) error
+	FinalizeTips(finHashes common.HashArray, lastFinHash common.Hash, lastFinHeight uint64)
+	RollbackFinalization(spineHash common.Hash, lfNr uint64) error
+	SaveBlockDag(blockDag *types.BlockDAG)
+	SetRollbackActive()
+	ResetRollbackActive()
+
+	// --- DAG traversal ---
+	CollectAncestorsAftCpByTips(parents common.HashArray, cpHash common.Hash) (bool, HeaderMap, common.HashArray, types.Tips)
+	CollectAncestorsAftCpByParents(parents common.HashArray, cpHash common.Hash) (bool, HeaderMap, common.HashArray, error)
+
+	// --- Slot / era / sync state ---
+	GetSlotInfo() *types.SlotInfo
+	SetSlotInfo(si *types.SlotInfo) error
+	GetEraInfo() *era.EraInfo
+	HandleEra(cp *types.Checkpoint) error
+	GetLastCoordinatedCheckpoint() *types.Checkpoint
+	SetLastCoordinatedCheckpoint(cp *types.Checkpoint)
+	IsSynced() bool
+	SetIsSynced(synced bool)
+	ResetSyncCheckpointCache()
+	SetSyncCheckpointCache(cp *types.Checkpoint)
+
+	// --- Validator sync ---
+	AppendNotProcessedValidatorSyncData(valSyncData []*types.ValidatorSync)
+	CleanInvalidNotProcessedValidatorSync()
+	FixValidatorSyncOps(finEpoch uint64, valSyncData []*types.ValidatorSync) []*types.ValidatorSync
+
+	// --- Mutex ---
+	DagMuLock()
+	DagMuUnlock()
+
+	// --- Validator storage (narrow dag view: slot → creator addresses) ---
+	ValidatorStorage() CreatorsBySlotStorage
 }

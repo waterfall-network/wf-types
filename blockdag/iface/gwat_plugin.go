@@ -45,8 +45,13 @@ type GwatPlugin interface {
 	// Stop stops the plugin's background services.
 	Stop() error
 
-	// BlockChain returns an abstracted view of the execution blockchain.
+	// BlockChain returns the blockchain backend needed by the dag package.
 	BlockChain() BlockChain
+
+	// ValidatorChain returns the blockchain backend needed by validator and
+	// validatorsync packages. gwat may return the same underlying object as
+	// BlockChain() if it satisfies both interfaces.
+	ValidatorChain() ValidatorChain
 
 	// TxPool returns an abstracted view of the transaction pool.
 	TxPool() TxPool
@@ -55,8 +60,9 @@ type GwatPlugin interface {
 // gwatPluginNoop is a no-op placeholder used only for the compile-time check.
 type gwatPluginNoop struct{}
 
-func (g *gwatPluginNoop) Init(_ *NodeConfig) error { return nil }
-func (g *gwatPluginNoop) Start() error             { return nil }
-func (g *gwatPluginNoop) Stop() error              { return nil }
-func (g *gwatPluginNoop) BlockChain() BlockChain   { return nil }
-func (g *gwatPluginNoop) TxPool() TxPool           { return nil }
+func (g *gwatPluginNoop) Init(_ *NodeConfig) error       { return nil }
+func (g *gwatPluginNoop) Start() error                   { return nil }
+func (g *gwatPluginNoop) Stop() error                    { return nil }
+func (g *gwatPluginNoop) BlockChain() BlockChain         { return nil }
+func (g *gwatPluginNoop) ValidatorChain() ValidatorChain { return nil }
+func (g *gwatPluginNoop) TxPool() TxPool                 { return nil }
