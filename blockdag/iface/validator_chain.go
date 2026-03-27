@@ -15,10 +15,31 @@
 package iface
 
 import (
+	"math/big"
+
 	"gitlab.waterfall.network/waterfall/protocol/wf-types/blockdag/types"
 	"gitlab.waterfall.network/waterfall/protocol/wf-types/blockdag/types/era"
 	"gitlab.waterfall.network/waterfall/protocol/wf-types/common"
 )
+
+// ProcessorCtx is the subset of *validator.Processor that gwat's
+// FixValidatorSyncOpProcessing fix needs. Defining it here avoids a circular
+// import between wf-engine/validator and wf-types.
+type ProcessorCtx interface {
+	GetBlockContext() BlockContext
+}
+
+// ValidatorSyncOpFix is the subset of operation.ValidatorSync that gwat's
+// chain-fix functions read. operation.ValidatorSync from wf-engine satisfies
+// this interface without any changes.
+type ValidatorSyncOpFix interface {
+	InitTxHash() common.Hash
+	OpType() types.ValidatorSyncOp
+	ProcEpoch() uint64
+	Index() uint64
+	Creator() common.Address
+	Amount() *big.Int
+}
 
 // ValidatorChain is the blockchain interface needed by the validator and
 // validatorsync packages in wf-engine. gwat implements this over *core.BlockChain.
@@ -55,4 +76,10 @@ type ValidatorChain interface {
 	// GetTransactionSender recovers the sender of the transaction.
 	// Replaces types.LatestSigner + types.Sender from gwat.
 	GetTransactionSender(txHash common.Hash) (common.Address, error)
+
+	// --- Hard-coded chain fixes ---
+	// FixValidatorSyncOpProcessing applies mainnet-specific fixes during
+	// validator sync op processing. gwat implements this in core/chain_fixes.go.
+	// The processor performs the ValidatorSync type-assertion before calling this.
+	FixValidatorSyncOpProcessing(ctx ProcessorCtx, op ValidatorSyncOpFix, txHash common.Hash, from, to common.Address) (isApplied bool, ret []byte, err error)
 }
