@@ -25,6 +25,8 @@ type NodeConfig struct {
 	HTTPPort int
 	// IPCPath is the path to the IPC socket.
 	IPCPath string
+	// DevMode enables development/testing mode (no real PoW/PoS checks).
+	DevMode bool
 	// Extra holds any additional plugin-specific config as raw bytes.
 	Extra []byte
 }
@@ -55,6 +57,15 @@ type GwatPlugin interface {
 
 	// TxPool returns an abstracted view of the transaction pool.
 	TxPool() TxPool
+
+	// Downloader returns the sync downloader needed by the dag package.
+	Downloader() Downloader
+
+	// Creator returns the block creator needed by the dag package.
+	Creator() BlockCreator
+
+	// IsDevMode reports whether the node was started in development mode.
+	IsDevMode() bool
 }
 
 // gwatPluginNoop is a no-op placeholder used only for the compile-time check.
@@ -66,3 +77,6 @@ func (g *gwatPluginNoop) Stop() error                    { return nil }
 func (g *gwatPluginNoop) BlockChain() BlockChain         { return nil }
 func (g *gwatPluginNoop) ValidatorChain() ValidatorChain { return nil }
 func (g *gwatPluginNoop) TxPool() TxPool                 { return nil }
+func (g *gwatPluginNoop) Downloader() Downloader         { return nil }
+func (g *gwatPluginNoop) Creator() BlockCreator          { return nil }
+func (g *gwatPluginNoop) IsDevMode() bool                { return false }
