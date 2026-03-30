@@ -16,19 +16,17 @@ package iface
 
 // NodeConfig holds the configuration required to initialize a gwat plugin.
 type NodeConfig struct {
-	// DataDir is the root data directory.
-	DataDir string
-	// NetworkID is the Ethereum network identifier.
-	NetworkID uint64
-	// HTTPHost and HTTPPort configure the HTTP-RPC server.
-	HTTPHost string
-	HTTPPort int
-	// IPCPath is the path to the IPC socket.
-	IPCPath string
-	// DevMode enables development/testing mode (no real PoW/PoS checks).
+	// Args are the raw CLI arguments forwarded verbatim to gwat's own flag
+	// parser (gopkg.in/urfave/cli.v1). The host does not interpret these;
+	// gwat handles all flag semantics internally.
+	//
+	// Example (everything after "--" on the wf-engine command line):
+	//   --datadir=.data/beacon-0 --networkid=333777333 --bootnodes=enode://...
+	Args []string
+
+	// DevMode is extracted from Args for use by the host-side dag.Backend.IsDevMode()
+	// check. It mirrors the --dev flag in Args — the plugin also reads it from Args.
 	DevMode bool
-	// Extra holds any additional plugin-specific config as raw bytes.
-	Extra []byte
 }
 
 // GwatPlugin is the lifecycle interface for the gwat execution plugin.
