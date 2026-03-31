@@ -64,6 +64,11 @@ type GwatPlugin interface {
 
 	// IsDevMode reports whether the node was started in development mode.
 	IsDevMode() bool
+
+	// SetDag replaces gwat's internal dag workloop with the provided wf-engine dag.
+	// Must be called after Start(). gwat stops its internal dag and routes all
+	// coordinator IPC calls to d instead.
+	SetDag(d Dag)
 }
 
 // gwatPluginNoop is a no-op placeholder used only for the compile-time check.
@@ -78,3 +83,4 @@ func (g *gwatPluginNoop) TxPool() TxPool                 { return nil }
 func (g *gwatPluginNoop) Downloader() Downloader         { return nil }
 func (g *gwatPluginNoop) Creator() BlockCreator          { return nil }
 func (g *gwatPluginNoop) IsDevMode() bool                { return false }
+func (g *gwatPluginNoop) SetDag(_ Dag)                   {}
