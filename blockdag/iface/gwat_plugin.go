@@ -69,6 +69,11 @@ type GwatPlugin interface {
 	// Must be called after Start(). gwat stops its internal dag and routes all
 	// coordinator IPC calls to d instead.
 	SetDag(d Dag)
+
+	// SetProcessorFactories injects external token and validator processor factories.
+	// When set, gwat uses the provided factories instead of its own default processors
+	// for every block execution. Must be called after Start() and before block processing.
+	SetProcessorFactories(tp TokenProcessorFactory, vp ValidatorProcessorFactory)
 }
 
 // gwatPluginNoop is a no-op placeholder used only for the compile-time check.
@@ -84,3 +89,5 @@ func (g *gwatPluginNoop) Downloader() Downloader         { return nil }
 func (g *gwatPluginNoop) Creator() BlockCreator          { return nil }
 func (g *gwatPluginNoop) IsDevMode() bool                { return false }
 func (g *gwatPluginNoop) SetDag(_ Dag)                   {}
+func (g *gwatPluginNoop) SetProcessorFactories(_ TokenProcessorFactory, _ ValidatorProcessorFactory) {
+}
